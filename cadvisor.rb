@@ -24,7 +24,8 @@ module Sensu
           etcd_version: 'v1',
           endpoints: 'http://localhost:8080',
           mode: 'endpoint', # or etcd
-          subcontainers: '.+'
+          subcontainers: '.+',
+          timeout: 2
         }
         if @settings[:cadvisor].is_a?(Hash)
           @options.merge!(@settings[:cadvisor])
@@ -49,13 +50,17 @@ module Sensu
           options[:etcd].split(',').each do |srv|
             etcd_uri = "#{srv}/#{options[:etcd_version]}/machines"
             begin
-              machines_page = Net::HTTP.get(URI(etcd_uri))
-              machines_page.split(',').each do |endpoint|
-                endpoints << "http://#{URI(endpoint.strip).host}:8080"
+              timeout options[:timeout] do
+                machines_page = Net::HTTP.get(URI(etcd_uri))
+                machines_page.split(',').each do |endpoint|
+                  endpoints << "http://#{URI(endpoint.strip).host}:8080"
+                end
               end
               break
+            rescue Timeout::Error
+             @logger.error("cadvisor: etcd endpoint #{srv} timed out")
             rescue => exc
-             @logger.error("cadvisor: etcd endpoint #{endpoint} unavailable")
+             @logger.error("cadvisor: etcd endpoint #{srv} unavailable")
             end
           end
         end
